@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Workspace</title>
+    <!-- Tailwind CSS Stylesheet compilation -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- FontAwesome for iconography -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Print media styles optimized exclusively for Month Heading, Total, and Category Summaries */
+        @media print {
+            body { background: white; color: black; font-size: 14px; }
+            .no-print { display: none !important; }
+            .print-container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; border: none !important; }
+            .print-card { border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
+            
+            /* Enforce visibility of the category breakdown table and total summary on print */
+            #print-summary-table { display: table !important; width: 100% !important; }
+            #print-total-display { display: flex !important; }
+            #live-history-table { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800 min-h-screen relative">
+
+    <!-- Global Top Loading Progress Bar Tracker -->
+    <div class="absolute top-0 left-0 right-0 h-1 bg-slate-100 overflow-hidden no-print z-50">
+        <div id="global-loading-bar" class="h-full bg-rose-600 w-0 transition-all duration-300 ease-out opacity-0"></div>
+    </div>
+
+    <div class="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 print-container">
+        <!-- Header Controls -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 pb-6 border-b border-slate-200 no-print">
+            <div class="text-center md:text-left">
+                <h1 class="text-3xl font-bold text-slate-900 tracking-tight">
+                    <i class="fa-solid fa-indian-rupee-sign text-rose-600 mr-2"></i>Expense Workspace
+                </h1>
+                <p class="text-slate-500 mt-1">Allocation Management & PDF Exports</p>
+            </div>
+            
+            <!-- Filters & Actions -->
+            <div class="flex flex-wrap items-center justify-center gap-3">
+                <div class="relative">
+                    <span class="absolute left-3 top-2.5 text-slate-400 text-sm"><i class="fa-solid fa-calendar"></i></span>
+                    <input type="month" id="month-filter" value="2026-06"
+                        class="pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer">
+                </div>
+
+                <div class="relative">
+                    <span class="absolute left-3 top-2.5 text-slate-400 text-sm"><i class="fa-solid fa-filter"></i></span>
+                    <select id="category-filter" 
+                        class="pl-9 pr-8 py-1.5 border border-slate-200 rounded-xl bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer appearance-none">
+                        <option value="ALL">All Categories</option>
+                        <option value="Transport">🚗 Transport</option>
+                        <option value="Bills & Recharge">📱 Bills & Recharge</option>
+                        <option value="Food & Snacks">🍿 Food & Snacks</option>
+                        <option value="Groceries">🛒 Groceries</option>
+                        <option value="Entertainment">🎬 Entertainment</option>
+                        <option value="Shopping">🛍️ Shopping</option>
+                        <option value="Others">📦 Others</option>
+                    </select>
+                    <span class="absolute right-3 top-3 text-slate-400 text-xs pointer-events-none"><i class="fa-solid fa-chevron-down"></i></span>
+                </div>
+
+                <button id="download-pdf" class="bg-slate-900 hover:bg-slate-800 text-white font-medium text-sm py-2 px-4 rounded-xl transition flex items-center gap-2 cursor-pointer shadow-xs">
+                    <i class="fa-solid fa-file-pdf"></i> Download PDF
+                </button>
+            </div>
+        </header>
+
+        <!-- Dynamic Month Heading for Print PDF -->
+        <div class="hidden print:block mb-6 text-center border-b pb-4 border-slate-200">
+            <h2 id="print-month-heading" class="text-3xl font-bold text-slate-900 tracking-tight">June 2026 Expense Report</h2>
+            <p id="print-date-subtitle" class="text-slate-500 text-sm mt-1"></p>
+        </div>
+
+        <!-- Metric Cards Layout (Hidden on Print except for the total expense summary wrapper) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+            <div class="bg-white p-6 rounded-2xl shadow-xs border border-slate-100 no-print flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Target Budget</p>
+                    <h3 class="text-2xl font-bold text-slate-900 mt-1">₹2,500.00</h3>
+                </div>
+                <div class="w-11 h-11 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500 text-lg">
+                    <i class="fa-solid fa-bullseye"></i>
+                </div>
+            </div>
+
+            <!-- Total Expense Display: Formatted cleanly to show up on UI and PDF -->
+            <div id="print-total-display" class="bg-white p-6 rounded-2xl shadow-xs border border-slate-100 flex items-center justify-between print:mb-6 print:p-4 print:border print:border-slate-200">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider print:text-slate-600 print:text-sm">Total Expenses</p>
+                    <h3 id="matrix-expense" class="text-2xl font-bold text-rose-600 mt-1 print:text-3xl">₹0.00</h3>
+                </div>
+                <div class="w-11 h-11 bg-rose-50 rounded-xl flex items-center justify-center text-rose-600 text-lg no-print">
+                    <i class="fa-solid fa-arrow-trend-up"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-xs border border-slate-100 no-print flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Remaining Balance</p>
+                    <h3 id="matrix-balance" class="text-2xl font-bold text-emerald-600 mt-1">₹2,500.00</h3>
+                </div>
+                <div id="matrix-balance-icon" class="w-11 h-11 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 text-lg">
+                    <i class="fa-solid fa-scale-balanced"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Workspace Blocks -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+            <!-- Left Column: Input form (Hidden on print) -->
+            <div class="lg:col-span-1 no-print">
+                <div class="bg-white p-6 rounded-2xl shadow-xs border border-slate-100">
+                    <h2 class="text-lg font-bold text-slate-900 mb-4">Log New Expense</h2>
+                    <form id="expense-form" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Date</label>
+                            <input type="date" id="expense-date" value="2026-06-07" required
+                                class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Category</label>
+                            <select id="category-select" required 
+                                class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer text-slate-700">
+                                <option value="" disabled selected>Choose type...</option>
+                                <option value="Transport">🚗 Transport</option>
+                                <option value="Bills & Recharge">📱 Bills & Recharge</option>
+                                <option value="Food & Snacks">🍿 Food & Snacks</option>
+                                <option value="Groceries">🛒 Groceries</option>
+                                <option value="Entertainment">🎬 Entertainment</option>
+                                <option value="Shopping">🛍️ Shopping</option>
+                                <option value="Others">📦 Others</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Cost (₹)</label>
+                            <input type="number" id="amount" step="0.01" min="0.01" required placeholder="0.00" 
+                                class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-500">
+                        </div>
+                        <button type="submit" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-medium text-sm py-2.5 px-4 rounded-lg transition duration-150 shadow-xs cursor-pointer">
+                            Add Transaction
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Right Column: Tables Workspace Wrapper -->
+            <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-xs border border-slate-100 print-card">
+                <div class="flex items-center justify-between mb-4 no-print">
+                    <h2 class="text-lg font-bold text-slate-900">Transaction History</h2>
+                    <button id="clear-all" class="text-xs text-slate-400 hover:text-rose-600 transition duration-150 cursor-pointer">
+                        <i class="fa-solid fa-trash-can mr-1"></i> Wipe View
+                    </button>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <!-- Live History Table (Hidden automatically on PDF print outputs) -->
+                    <table id="live-history-table" class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-100 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                <th class="py-3 px-2">Category</th>
+                                <th class="py-3 px-2">Date</th>
+                                <th class="py-3 px-2 text-right">Amount</th>
+                                <th class="py-3 px-2 text-right no-print w-12"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="transaction-rows" class="divide-y divide-slate-100 text-sm text-slate-700">
+                            <!-- Injected Dynamic Rows -->
+                        </tbody>
+                    </table>
+
+                    <!-- Category Summary Table (Displayed explicitly on PDF reports instead of raw logs) -->
+                    <table id="print-summary-table" class="w-full text-left border-collapse hidden">
+                        <thead>
+                            <tr class="border-b-2 border-slate-300 text-sm font-semibold text-slate-600 uppercase tracking-wider">
+                                <th class="py-3 px-2">Category Breakdown</th>
+                                <th class="py-3 px-2 text-right">Total Expenses</th>
+                            </tr>
+                        </thead>
+                        <tbody id="summary-rows" class="divide-y divide-slate-200 text-sm text-slate-800">
+                            <!-- Injected Dynamic Summary Rows -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="empty-state" class="text-center py-16 text-slate-400 hidden">
+                    <i class="fa-solid fa-folder-open text-4xl mb-3 text-slate-200"></i>
+                    <p class="text-sm font-medium">No recorded statements matching parameters.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BUDGET_CEILING = 2500;
+
+        const baseMockLogs = [
+            { id: 1, description: "Bills & Recharge", amount: 299, date: "2026-06-02" },
+            { id: 2, description: "Food & Snacks", amount: 120, date: "2026-06-04" },
+            { id: 3, description: "Transport", amount: 500, date: "2026-06-05" },
+            { id: 4, description: "Food & Snacks", amount: 350, date: "2026-06-06" }
+        ];
+
+        let database = JSON.parse(localStorage.getItem('matrix_expenses')) || baseMockLogs;
+
+        // Bind DOM targets
+        const expenseForm = document.getElementById('expense-form');
+        const categorySelect = document.getElementById('category-select');
+        const amountInput = document.getElementById('amount');
+        const expenseDateInput = document.getElementById('expense-date');
+        const monthFilterInput = document.getElementById('month-filter');
+        const categoryFilterInput = document.getElementById('category-filter');
+        const loadingBar = document.getElementById('global-loading-bar');
+        const rowContainer = document.getElementById('transaction-rows');
+        const summaryRowContainer = document.getElementById('summary-rows');
+        const emptyState = document.getElementById('empty-state');
+        const clearBtn = document.getElementById('clear-all');
+        const pdfBtn = document.getElementById('download-pdf');
+        const matrixExpenseEl = document.getElementById('matrix-expense');
+        const matrixBalanceEl = document.getElementById('matrix-balance');
+        const matrixBalanceIcon = document.getElementById('matrix-balance-icon');
+
+        const formatCurrency = num => '₹' + num.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+
+        function parseLocalDateString(rawDateStr) {
+            const parts = rawDateStr.split('-');
+            if(parts.length !== 3) return rawDateStr;
+            return new Date(parts[0], parts[1] - 1, parts[2]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        function triggerLoading(callback) {
+            loadingBar.style.opacity = '1';
+            loadingBar.style.width = '35%';
+            setTimeout(() => loadingBar.style.width = '75%', 100);
+            setTimeout(() => {
+                loadingBar.style.width = '100%';
+                if (callback) callback();
+                setTimeout(() => {
+                    loadingBar.style.opacity = '0';
+                    setTimeout(() => loadingBar.style.width = '0%', 200);
+                }, 100);
+            }, 250);
+        }
+
+        function renderWorkspace() {
+            const targetMonth = monthFilterInput.value; 
+            const targetCategory = categoryFilterInput.value;
+            
+            const monthDataset = database.filter(item => !targetMonth || item.date.startsWith(targetMonth));
+            const tableDataset = monthDataset.filter(item => targetCategory === 'ALL' || item.description === targetCategory);
+            
+            const totalSpent = monthDataset.reduce((sum, entry) => sum + entry.amount, 0);
+            const netBalance = BUDGET_CEILING - totalSpent;
+
+            matrixExpenseEl.innerText = formatCurrency(totalSpent);
+            matrixBalanceEl.innerText = formatCurrency(netBalance);
+
+            const isOverBudget = netBalance < 0;
+            matrixBalanceEl.className = `text-2xl font-bold mt-1 ${isOverBudget ? 'text-rose-600' : 'text-emerald-600'}`;
+            matrixBalanceIcon.className = `w-11 h-11 rounded-xl flex items-center justify-center text-lg ${isOverBudget ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`;
+
+            rowContainer.innerHTML = '';
+            if (tableDataset.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+
+            [...tableDataset].sort((a,b) => new Date(b.date) - new Date(a.date)).forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50/70 transition duration-75 group";
+                tr.innerHTML = `
+                    <td class="py-3 px-2 font-medium text-slate-900">${item.description}</td>
+                    <td class="py-3 px-2 text-slate-400 text-xs">${parseLocalDateString(item.date)}</td>
+                    <td class="py-3 px-2 text-right font-semibold text-slate-900">₹${item.amount.toFixed(2)}</td>
+                    <td class="py-3 px-2 text-right no-print w-12">
+                        <button onclick="removeItem(${item.id})" class="text-slate-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition duration-100 cursor-pointer">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                rowContainer.appendChild(tr);
+            });
+
+            // Dynamically build and maintain category sums table for printing checks
+            buildPrintSummary(tableDataset);
+        }
+
+        function buildPrintSummary(dataset) {
+            summaryRowContainer.innerHTML = '';
+            
+            const categorySums = {};
+            dataset.forEach(item => {
+                categorySums[item.description] = (categorySums[item.description] || 0) + item.amount;
+            });
+
+            Object.entries(categorySums).sort((a,b) => b[1] - a[1]).forEach(([category, total]) => {
+                const tr = document.createElement('tr');
+                tr.className = "print:text-slate-900";
+                tr.innerHTML = `
+                    <td class="py-3 px-2 font-semibold">${category}</td>
+                    <td class="py-3 px-2 text-right font-bold">${formatCurrency(total)}</td>
+                `;
+                summaryRowContainer.appendChild(tr);
+            });
+        }
+
+        function persistData() {
+            localStorage.setItem('matrix_expenses', JSON.stringify(database));
+            renderWorkspace();
+        }
+
+        expenseForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const amount = parseFloat(amountInput.value);
+            if(!categorySelect.value || isNaN(amount) || !expenseDateInput.value) return;
+
+            database.push({
+                id: Date.now(),
+                description: categorySelect.value,
+                amount,
+                date: expenseDateInput.value
+            });
+
+            monthFilterInput.value = expenseDateInput.value.substring(0, 7);
+            categoryFilterInput.value = "ALL";
+            amountInput.value = '';
+            categorySelect.value = '';
+            
+            triggerLoading(persistData);
+        });
+
+        function removeItem(id) {
+            database = database.filter(entry => entry.id !== id);
+            triggerLoading(persistData);
+        }
+
+        clearBtn.addEventListener('click', () => {
+            if(confirm("Wipe completely all metrics items across current data stores?")) {
+                database = [];
+                triggerLoading(persistData);
+            }
+        });
+
+        const handleFilterChange = () => triggerLoading(renderWorkspace);
+        monthFilterInput.addEventListener('change', handleFilterChange);
+        categoryFilterInput.addEventListener('change', handleFilterChange);
+
+        pdfBtn.addEventListener('click', () => {
+            const filterValue = monthFilterInput.value;
+            let displayDate = "All Dates";
+            if (filterValue) {
+                const parts = filterValue.split('-');
+                displayDate = new Date(parts[0], parts[1] - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            }
+            
+            // Set Print Headings dynamically right before window triggers layout rendering
+            document.getElementById('print-month-heading').innerText = `${displayDate} Expense Report`;
+            
+            const categoryLabel = categoryFilterInput.value === 'ALL' ? 'All Categories Included' : `Filtered Category: ${categoryFilterInput.value}`;
+            document.getElementById('print-date-subtitle').innerText = categoryLabel;
+            
+            window.print();
+        });
+
+        renderWorkspace();
+    </script>
+</body>
+</html>
